@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toView } from '../../src/view/steps.js';
-import type { RequestEvent, Session, SessionMeta } from '../../src/model.js';
+import { parseToolUseId, type RequestEvent, type Session, type SessionMeta } from '../../src/model.js';
 import { readGoldenSession, readGoldenSteps } from '../support/golden.js';
 
 /** Minimal session with the given request events. */
@@ -85,4 +85,54 @@ test('code block is cut at 60 lines', () => {
 
 test('every step has at least one tag', () => {
   for (const step of toView(readGoldenSession()).steps) assert.ok(step.k.length >= 1, step.t);
+});
+
+test('details: one entry per step, a turn detail for each request step', () => {
+  const s = readGoldenSession();
+  const view = toView(s);
+  assert.equal(view.details.length, view.steps.length);
+  s.events.forEach((e, i) => assert.equal(view.details[i] !== null, e.type === 'request', `step ${i + 1}`));
+  const turns = view.details.flatMap((d) => (d ? [d.n] : []));
+  assert.deepEqual(turns, [1, 2, 3, 4, 5, 6]);
+});
+
+test('details: a tool call keeps its status, hooks, and result lines', () => {
+  const view = toView(readGoldenSession());
+  const first = view.details.find((d) => d !== null);
+  assert.ok(first);
+  assert.equal(first.stop, 'tool_use');
+  assert.deepEqual(first.usage, { cacheRead: 12995, cacheWrite: 1000, input: 5, output: 100, thinking: null });
+  assert.deepEqual(first.blocks, [{ type: 'thinking', text: 'Look at the layout first.' }, { type: 'tool_use', tool: 0 }]);
+  const glob = first.tools[0];
+  assert.ok(glob);
+  assert.deepEqual(glob.arg, { kind: 'pattern', v: 'packages/apps/**/*.ts', extra: '' });
+  assert.equal(glob.status, 'ok');
+  assert.equal(glob.pre[0]?.name, 'PreToolUse:Glob');
+  assert.equal(glob.post[0]?.name, 'PostToolUse:Glob');
+  assert.deepEqual(glob.result, { lines: ['packages/apps/web/src/utils/date.ts', 'packages/apps/web/src/api/client.ts'], total: 2 });
+});
+
+test('details: result lines keep the indentation and stop at 2,000', () => {
+  const lines = Array.from({ length: 2010 }, (_, i) => '    line ' + i);
+  const req: RequestEvent = {
+    ...request(10),
+    stopReason: 'tool_use',
+    blocks: [{ type: 'tool_use', toolId: parseToolUseId('t1') ?? assert.fail('id') }],
+    tools: [{ id: parseToolUseId('t1') ?? assert.fail('id'), name: 'Read', input: { file_path: '/a/b.ts' }, pre: [], post: [], subagent: null, status: 'ok', result: { text: lines.join('\n') + '\n\n', isError: false } }],
+  };
+  const tool = toView(sessionWith([req])).details[1]?.tools[0];
+  assert.deepEqual(tool?.arg, { kind: 'path', v: '/a/b.ts', extra: '' });
+  assert.equal(tool?.result?.total, 2010);
+  assert.deepEqual(tool?.result?.lines, lines.slice(0, 2000));
+});
+
+test('details: a command is kept in full, with its line breaks', () => {
+  const command = "python3 - <<'EOF'\n" + 'x = 1\n'.repeat(200) + 'EOF';
+  const req: RequestEvent = {
+    ...request(10),
+    stopReason: 'tool_use',
+    blocks: [{ type: 'tool_use', toolId: parseToolUseId('t1') ?? assert.fail('id') }],
+    tools: [{ id: parseToolUseId('t1') ?? assert.fail('id'), name: 'Bash', input: { command }, pre: [], post: [], subagent: null, status: 'ok', result: { text: 'ok', isError: false } }],
+  };
+  assert.deepEqual(toView(sessionWith([req])).details[1]?.tools[0]?.arg, { kind: 'cmd', v: command, extra: '' });
 });

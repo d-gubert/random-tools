@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toView, type Step, type View } from '../../src/view/steps.js';
-import { renderHtml } from '../../src/render/html.js';
+import { renderHtml, TURN_CONTENTS } from '../../src/render/html.js';
 import { readGoldenSession } from '../support/golden.js';
 import { pageData } from '../support/page.js';
 
@@ -37,7 +37,8 @@ test('the harness name is HTML-escaped', () => {
 test('a script end tag in a step title does not end the data script', () => {
   const view = withFirstStep(toView(session), { t: '</script><script>alert(1)</script>' });
   const html = renderHtml(view);
-  assert.equal(html.split('</script>').length - 1, 2);
+  // The fragment script, the data script, and the page script.
+  assert.equal(html.split('</script>').length - 1, 3);
   assert.equal(pageData(html).steps[0]?.t, '</script><script>alert(1)</script>');
 });
 
@@ -53,4 +54,22 @@ test('U+2028 and U+2029 are escaped in the data', () => {
 test('replacement text with $ patterns is kept as is', () => {
   const view = withFirstStep(toView(session), { d: "cost $& $' $1" });
   assert.equal(pageData(renderHtml(view)).steps[0]?.d, "cost $& $' $1");
+});
+
+test('each turn content puts its fragment in place of the article', () => {
+  const view = toView(session);
+  for (const id of TURN_CONTENTS) {
+    const html = renderHtml(view, { turnContent: id });
+    assert.ok(html.includes(`<!-- Turn content: ${id}.`), id);
+    assert.ok(html.includes('id="turn-card"'), id);
+    assert.ok(html.includes('window.renderTurn='), id);
+    assert.doesNotMatch(html, /<!--__ARTICLE__-->|\/\*__(DATA|HARNESS)__\*\//, id);
+    assert.equal(html.match(/id="turn-card"/g)?.length, 1, id);
+  }
+  assert.ok(renderHtml(view).includes('<!-- Turn content: timeline.'));
+});
+
+test('a placeholder in the data is not replaced', () => {
+  const view = withFirstStep(toView(session), { d: '<!--__ARTICLE__--> /*__HARNESS__*/' });
+  assert.equal(pageData(renderHtml(view)).steps[0]?.d, '<!--__ARTICLE__--> /*__HARNESS__*/');
 });

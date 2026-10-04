@@ -35,9 +35,67 @@ export type ViewMeta = {
   readonly window: number;
 };
 
+/** One hook run, for the turn content of the page. */
+export type HookDetail = {
+  readonly event: string;
+  readonly name: string;
+  readonly outcome: string;
+  /** "" when unknown. */
+  readonly command: string;
+  /** Output or reason, clipped. "" when none. */
+  readonly detail: string;
+};
+
+/**
+ * The main input of a tool call. `kind` sets how the page shows `v`:
+ * a path with the file name in bold, a shell command, a search pattern, plain text, or JSON.
+ */
+export type ToolArg = {
+  readonly kind: 'path' | 'cmd' | 'pattern' | 'text' | 'json' | 'none';
+  readonly v: string;
+  /** For a pattern: the path or glob of the search. "" when none. */
+  readonly extra: string;
+};
+
+export type ToolDetail = {
+  readonly name: string;
+  readonly arg: ToolArg;
+  readonly status: ToolStatus;
+  readonly pre: readonly HookDetail[];
+  readonly post: readonly HookDetail[];
+  /** The first lines of the result, with the indentation kept. Null when the call has no result. */
+  readonly result: { readonly lines: readonly string[]; readonly total: number } | null;
+  /** TodoWrite items, for example "[x] write the tests". */
+  readonly todos: readonly string[];
+  /** For example "12 tool calls · 40,120 tokens · 1 min 3 s". "" when the tool ran no subagent. */
+  readonly subagent: string;
+};
+
+export type BlockDetail =
+  | { readonly type: 'thinking'; readonly text: string }
+  | { readonly type: 'redacted_thinking' }
+  | { readonly type: 'text'; readonly text: string }
+  /** `tool` is an index into `TurnDetail.tools`. */
+  | { readonly type: 'tool_use'; readonly tool: number }
+  | { readonly type: 'server_tool_use'; readonly name: string; readonly arg: ToolArg };
+
+/** The structured content of a request step. The page renders it with a turn-content fragment. */
+export type TurnDetail = {
+  readonly n: number;
+  readonly model: string;
+  /** Null when the log has no usage. */
+  readonly usage: { readonly cacheRead: number; readonly cacheWrite: number; readonly input: number; readonly output: number; readonly thinking: number | null } | null;
+  readonly stop: string;
+  readonly blocks: readonly BlockDetail[];
+  readonly tools: readonly ToolDetail[];
+  readonly hooks: readonly HookDetail[];
+};
+
 export type View = {
   readonly meta: ViewMeta;
   readonly steps: readonly Step[];
+  /** One entry per step: the turn detail of a request step, else null. Same length as `steps`. */
+  readonly details: readonly (TurnDetail | null)[];
 };
 
 /** The part of a step that `describe` writes. */
@@ -45,6 +103,12 @@ type StepText = Pick<Step, 't' | 'k' | 'd' | 'c'>;
 
 const MAX_CODE_LINES = 60;
 const RESULT_LINES = 3;
+/** Result lines in a turn detail. The page shows the first lines and expands to the rest. */
+const DETAIL_LINES = 2000;
+/** Characters of a result line in a turn detail. */
+const DETAIL_LINE = 1000;
+/** Characters of a text or thinking block in a turn detail. */
+const DETAIL_TEXT = 4000;
 
 const isRequest = (e: SessionEvent): e is RequestEvent => e.type === 'request';
 
@@ -120,7 +184,13 @@ export function toView(session: Session): View {
     turns: events.filter(isRequest).length,
     window: contextWindow(session),
   };
-  return { meta: view, steps: render(session) };
+  return { meta: view, steps: render(session), details: details(session) };
+}
+
+function details(session: Session): (TurnDetail | null)[] {
+  const events: readonly SessionEvent[] = session.events;
+  let turn = 0;
+  return events.map((e) => (e.type === 'request' ? turnDetail(e, ++turn) : null));
 }
 
 function render(session: Session): Step[] {
@@ -317,6 +387,72 @@ function describeRequest(s: RequestEvent, n: number): StepText {
   if (results) c.push(`messages += tool_result ×${results}`);
   if (s.hooks.length) c.push('', ...s.hooks.map(hookLine));
   return { t: title, k, d: d.join(' '), c: c.join('\n') };
+}
+
+// ---------------------------------------------------------------- turn detail
+
+/** Cut to `n` characters. Keeps the line breaks and the indentation. */
+const cut = (s: string, n: number): string => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+
+const hookDetail = (h: Hook): HookDetail => ({ event: h.event, name: h.name, outcome: h.outcome, command: clip(h.command, 200), detail: clip(h.detail, 300) });
+
+function toolArgDetail(input: unknown): ToolArg {
+  if (!isRecord(input)) return { kind: 'none', v: '', extra: '' };
+  const str = (x: unknown): string => (typeof x === 'string' ? x : '');
+  const path = str(input.file_path) || str(input.notebook_path);
+  if (path) return { kind: 'path', v: path, extra: '' };
+  // The full command, with its line breaks.
+  if (str(input.command)) return { kind: 'cmd', v: str(input.command).trim(), extra: '' };
+  if (str(input.pattern)) return { kind: 'pattern', v: clip(input.pattern, 200), extra: clip(str(input.path) || str(input.glob), 200) };
+  const text = input.url ?? input.query ?? input.description ?? input.skill ?? input.prompt ?? input.path;
+  if (typeof text === 'string') return { kind: 'text', v: clip(text, 400), extra: '' };
+  if (Array.isArray(input.todos)) return { kind: 'none', v: '', extra: '' };
+  return { kind: 'json', v: clip(JSON.stringify(input), 400), extra: '' };
+}
+
+function toolDetail(t: ToolCall): ToolDetail {
+  let result: ToolDetail['result'] = null;
+  if (t.result) {
+    const lines = t.result.text.split('\n');
+    while (lines.length && !lines[lines.length - 1]?.trim()) lines.pop();
+    result = { lines: lines.slice(0, DETAIL_LINES).map((l) => cut(l, DETAIL_LINE)), total: lines.length };
+  }
+  const sub = t.subagent;
+  return {
+    name: t.name,
+    arg: toolArgDetail(t.input),
+    status: t.status,
+    pre: t.pre.map(hookDetail),
+    post: t.post.map(hookDetail),
+    result,
+    todos: t.name === 'TodoWrite' ? todoLines(t.input).map((l) => l.trim()) : [],
+    subagent: sub ? `${plural(sub.toolCalls || 0, 'tool call')} · ${num(sub.tokens)} tokens · ${duration(sub.durationMs)}` : '',
+  };
+}
+
+/** @param n turn number */
+function turnDetail(s: RequestEvent, n: number): TurnDetail {
+  const u = s.usage;
+  const blocks: BlockDetail[] = [];
+  for (const b of s.blocks) {
+    if (b.type === 'thinking') blocks.push({ type: 'thinking', text: cut(b.text, DETAIL_TEXT) });
+    else if (b.type === 'redacted_thinking') blocks.push({ type: 'redacted_thinking' });
+    else if (b.type === 'text') {
+      if (b.text.trim()) blocks.push({ type: 'text', text: cut(b.text.trim(), DETAIL_TEXT) });
+    } else if (b.type === 'tool_use') {
+      const i = s.tools.findIndex((t) => t.id === b.toolId);
+      if (i >= 0) blocks.push({ type: 'tool_use', tool: i });
+    } else blocks.push({ type: 'server_tool_use', name: b.name, arg: toolArgDetail(b.input) });
+  }
+  return {
+    n,
+    model: s.model,
+    usage: u ? { cacheRead: u.cacheRead || 0, cacheWrite: u.cacheWrite || 0, input: u.input || 0, output: u.output || 0, thinking: u.thinking } : null,
+    stop: s.stopReason,
+    blocks,
+    tools: s.tools.map(toolDetail),
+    hooks: s.hooks.map(hookDetail),
+  };
 }
 
 function describeEnd(session: Session, s: SessionEndEvent): StepText {

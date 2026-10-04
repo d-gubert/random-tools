@@ -32,6 +32,8 @@ export type TraceArgs = {
   readonly format?: string;
   /** Number of sessions in the picker list. */
   readonly limit: number;
+  /** Turn-content fragment id. Without it, the renderer uses its default. */
+  readonly turnContent?: string;
 };
 
 /** Invariant 8: the arguments are one of four modes. */
@@ -44,12 +46,13 @@ export class UsageError extends Error {
   }
 }
 
-type FlagName = 'output' | 'stdout' | 'format' | 'list' | 'limit' | 'help' | 'version';
+type FlagName = 'output' | 'stdout' | 'format' | 'turnContent' | 'list' | 'limit' | 'help' | 'version';
 
 const LONG: Readonly<Record<string, FlagName>> = {
   '--output': 'output',
   '--stdout': 'stdout',
   '--format': 'format',
+  '--turn-content': 'turnContent',
   '--list': 'list',
   '--limit': 'limit',
   '--help': 'help',
@@ -66,6 +69,7 @@ export function parseArgs(argv: readonly string[]): Args {
   let output: string | undefined;
   let stdout = false;
   let format: string | undefined;
+  let turnContent: string | undefined;
   let list = false;
   let limit = DEFAULT_LIMIT;
   let help = false;
@@ -114,12 +118,13 @@ export function parseArgs(argv: readonly string[]): Args {
       if (!/^[1-9]\d*$/.test(value)) throw new UsageError(`invalid number for ${flag}: "${value}"`);
       limit = Number(value);
     } else if (name === 'output') output = value;
+    else if (name === 'turnContent') turnContent = value;
     else format = value;
   }
 
   if (output !== undefined && stdout) throw new UsageError('-o/--output and --stdout cannot be used together');
-  if (list && (session !== undefined || output !== undefined || stdout)) {
-    throw new UsageError('--list cannot be used with a session, -o/--output, or --stdout');
+  if (list && (session !== undefined || output !== undefined || stdout || turnContent !== undefined)) {
+    throw new UsageError('--list cannot be used with a session, -o/--output, --stdout, or --turn-content');
   }
 
   if (help) return { mode: 'help' };
@@ -127,16 +132,29 @@ export function parseArgs(argv: readonly string[]): Args {
   const withFormat = format === undefined ? {} : { format };
   if (list) return { mode: 'list', limit, ...withFormat };
   const target: OutputTarget = stdout ? { kind: 'stdout' } : output !== undefined ? { kind: 'file', path: output } : { kind: 'default' };
-  return { mode: 'trace', output: target, limit, ...withFormat, ...(session === undefined ? {} : { session }) };
+  return {
+    mode: 'trace',
+    output: target,
+    limit,
+    ...withFormat,
+    ...(turnContent === undefined ? {} : { turnContent }),
+    ...(session === undefined ? {} : { session }),
+  };
 }
 
-export function helpText(formatIds: readonly string[]): string {
+/**
+ * @param formatIds        the ids of the log formats
+ * @param turnContents     the ids of the turn-content fragments
+ * @param turnDefault      the id that the renderer uses without --turn-content
+ */
+export function helpText(formatIds: readonly string[], turnContents: readonly string[] = [], turnDefault: string = turnContents[0] ?? ''): string {
   return `usage: yast [options] [session]
 
   session            path to a session log, or a session ID (or a unique ID prefix)
   -o, --output FILE  write the page to FILE
       --stdout       write the page to stdout
   -f, --format ID    log format; default: detect (${formatIds.join(', ')})
+  --turn-content ID  how the page shows a loop turn: ${turnContents.join(', ')}; default: ${turnDefault}
   -l, --list         list the sessions and exit
   -n, --limit N      number of sessions in the list (default ${DEFAULT_LIMIT})
   -h, --help         show this help

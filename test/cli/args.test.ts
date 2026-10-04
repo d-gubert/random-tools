@@ -112,7 +112,19 @@ test('an unknown option is a usage error', () => {
 test('the help text lists the format ids', () => {
   const text = helpText(['claude-code', 'other']);
   assert.match(text, /claude-code, other/);
-  for (const opt of ['--output', '--stdout', '--format', '--list', '--limit', '--help', '--version']) assert.ok(text.includes(opt), opt);
+  for (const opt of ['--output', '--stdout', '--format', '--turn-content', '--list', '--limit', '--help', '--version']) assert.ok(text.includes(opt), opt);
+});
+
+test('the help text lists the turn-content ids and the default', () => {
+  assert.match(helpText(['claude-code'], ['timeline', 'inspector'], 'timeline'), /--turn-content ID .*timeline, inspector; default: timeline/);
+});
+
+test('--turn-content', () => {
+  assert.equal(trace(['--turn-content', 'inspector']).turnContent, 'inspector');
+  assert.equal(trace(['--turn-content=timeline', 's']).turnContent, 'timeline');
+  assert.equal('turnContent' in trace([]), false);
+  assert.throws(() => parseArgs(['--turn-content']), usage(/--turn-content needs a value/));
+  assert.throws(() => parseArgs(['--list', '--turn-content', 'inspector']), usage(/--list cannot be used/));
 });
 
 test('--list with a session, -o, or --stdout is a usage error', () => {

@@ -284,6 +284,27 @@ test('--format nope is a usage error', async () => {
   assert.deepEqual(await readdir(cwd), []);
 });
 
+test('the page uses the timeline turn content by default', async () => {
+  const { code, out } = await go([pathA, '--stdout']);
+  assert.equal(code, 0);
+  assert.ok(out.includes('<!-- Turn content: timeline.'));
+});
+
+test('--turn-content inspector selects the inspector fragment', async () => {
+  const { code, out } = await go([pathA, '--turn-content', 'inspector', '--stdout']);
+  assert.equal(code, 0);
+  assert.ok(out.includes('<!-- Turn content: inspector.'));
+  assert.ok(!out.includes('<!-- Turn content: timeline.'));
+});
+
+test('--turn-content nope is a usage error', async () => {
+  const { code, out, err } = await go([pathA, '--turn-content', 'nope']);
+  assert.equal(code, 2);
+  assert.equal(out, '');
+  assert.match(err, /unknown turn content "nope" \(known: timeline, inspector\)\nTry "yast --help"\.\n$/);
+  assert.deepEqual(await readdir(cwd), []);
+});
+
 test('a file that no format matches gives exit 1', async () => {
   await writeFile(join(cwd, 'notes.txt'), 'hello\n');
   const { code, out, err } = await go(['notes.txt']);

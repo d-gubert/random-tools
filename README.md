@@ -46,7 +46,7 @@ npm link
 yast --help
 ```
 
-`npm run build` compiles `bin/`, `src/`, and `test/` to `dist/` with `tsc`. It also copies `src/render/page.html` to `dist/src/render/`. Build again after you change a source file. `dist/` is not in git.
+`npm run build` compiles `bin/`, `src/`, and `test/` to `dist/` with `tsc`. It also copies `src/render/page.html` and `src/render/fragment/` to `dist/src/render/`. Build again after you change a source file. `dist/` is not in git.
 
 ## Usage
 
@@ -62,6 +62,9 @@ yast 5690d737
 # Choose the output file, or write to stdout
 yast <session> -o out/trace.html
 yast <session> --stdout > trace.html
+
+# Show the loop turns as a table with tabs, not as a timeline
+yast <session> --turn-content inspector
 
 # Only list the sessions
 yast --list
@@ -86,6 +89,7 @@ usage: yast [options] [session]
   -o, --output FILE  write the page to FILE
       --stdout       write the page to stdout
   -f, --format ID    log format; default: detect (claude-code)
+  --turn-content ID  how the page shows a loop turn: timeline, inspector; default: timeline
   -l, --list         list the sessions and exit
   -n, --limit N      number of sessions in the list (default 20)
   -h, --help         show this help
@@ -95,7 +99,10 @@ usage: yast [options] [session]
 Rules:
 
 - `-o` and `--stdout` cannot be used together.
-- `--list` cannot be used with a session, `-o`, or `--stdout`.
+- `--list` cannot be used with a session, `-o`, `--stdout`, or `--turn-content`.
+- `--turn-content` selects the fragment that shows a step on the page:
+  - `timeline` (the default) shows a loop turn as the events in order: the request, the thinking, the text, the stop reason, and then each tool call with its hooks and its result. A command shows in full. A result shows 12 lines; click "more lines" to see the rest (up to 2,000 lines).
+  - `inspector` shows the model, the context, the output tokens, and the stop reason in a grid. Tabs show the tool calls as a table, the response blocks, and the raw text.
 - `-f` selects a format by its ID. Without `-f`, yast detects the format from the file.
 - `-o` does not create directories. The directory of `FILE` must exist.
 
@@ -182,13 +189,25 @@ src/formats/           parse one log file into a Session
 src/model.ts           the Session model (the contract: types, and the makers of the branded types)
 src/view/              Session -> View (the steps)
 src/render/            View -> HTML (page.html is the page template; the build copies it)
+src/render/fragment/turn-content/
+                       the article of a step: timeline.html, inspector.html (--turn-content)
 test/                  node:test tests (TypeScript), type tests, golden files, and the fixture
-scripts/dist.mjs       build helper: clean dist/, copy page.html
+scripts/dist.mjs       build helper: clean dist/, copy page.html and the fragments
 docs/                  the plan, the task files, and the format guide
 dist/                  the build output (not in git); `bin` of package.json points here
 ```
 
 Data flow: `source -> path -> format.parse -> Session -> toView -> renderHtml -> file`.
+
+### Turn-content fragments
+
+A fragment in `src/render/fragment/turn-content/` holds the full article of a step: its `<style>`, an `<article id="turn-card">`, and a `<script>`. The renderer puts the fragment in place of `<!--__ARTICLE__-->` in `page.html`. The script must define `window.renderTurn(step, detail, meta)`. The page calls it each time the step changes.
+
+- `step` is a `Step` (the title, the tags, the description, and the code text `c`).
+- `detail` is the `TurnDetail` of a request step, else `null`. It has the usage, the response blocks, the tool calls with their hooks and results, and the turn hooks.
+- `meta` is the `ViewMeta`.
+
+To add a fragment, add `<id>.html` to the folder and add the ID to `TURN_CONTENTS` in `src/render/html.ts`. Use the color tokens of `page.html`. Do not reuse an `id` of `page.html`.
 
 Only `src/cli/run.ts` joins the other modules. A format knows only the model. The view knows only the model. The renderer gets a View. `test/layers.test.ts` checks these rules on the imports.
 

@@ -1,0 +1,159 @@
+<!-- Turn content: timeline. The page inserts this fragment in place of the article.
+     Contract: define renderTurn(step, detail, meta). `detail` is the TurnDetail of a request step, else null.
+     It uses the color tokens of page.html. -->
+<style>
+.tc-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:grid;gap:12px;min-width:0}
+.tc-tags{display:flex;gap:6px;flex-wrap:wrap}
+.tc-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:2px 9px 2px 7px;border-radius:999px;border:1px solid var(--c);color:var(--c)}
+.tc-dot{width:7px;height:7px;border-radius:50%;background:var(--c);flex:none;display:inline-block}
+.tc-card h2{font-size:18px;font-weight:600;margin:0;overflow-wrap:anywhere}
+.tc-card > p{margin:0;color:var(--ink-2);max-width:65ch}
+.tc-pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.6;background:var(--sunk);border-radius:8px;padding:12px 14px;overflow:auto;max-height:60vh;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.tc-mono{font-family:var(--mono)}
+.tc-muted{color:var(--ink-3)}
+.tc-num{font-variant-numeric:tabular-nums}
+.tc-path{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere;color:var(--ink-3)}
+.tc-path b{font-weight:500;color:var(--ink)}
+.tc-arg{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere;white-space:pre-wrap;color:var(--ink)}
+.tc-cmd{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.55;background:var(--sunk);border-radius:6px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:40vh;overflow:auto;color:var(--ink)}
+.tc-cmd::before{content:"$ ";color:var(--ink-3)}
+.tc-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;white-space:nowrap}
+.tc-status.ok{color:var(--ok)} .tc-status.bad{color:var(--err)} .tc-status.none{color:var(--ink-3)}
+.tc-pill{font-family:var(--mono);font-size:12px;background:var(--sunk);border-radius:4px;padding:1px 6px;color:var(--ink)}
+.tc-ctxbar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--line);max-width:420px}
+.tc-ctxbar i{display:block;height:100%}
+.tc-ctxkey{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.tc-ctxkey span{display:inline-flex;align-items:center;gap:6px}
+.tc-sq{width:8px;height:8px;border-radius:2px;background:var(--c);display:inline-block}
+.tc-result{margin:0;font-family:var(--mono);font-size:12px;line-height:1.6;background:var(--sunk);border-radius:6px;padding:8px 0;overflow:auto;max-height:70vh;color:var(--ink)}
+.tc-result .tc-ln{display:grid;grid-template-columns:3.2em minmax(0,1fr);white-space:pre;min-width:max-content}
+.tc-result .tc-ln::before{content:attr(data-n);color:var(--ink-3);text-align:right;padding-right:12px;user-select:none}
+.tc-rest[hidden]{display:none}
+.tc-more{position:sticky;left:0;display:block;background:none;border:0;cursor:pointer;color:var(--focus);font-family:var(--sans);font-size:12px;padding:2px 0 0 calc(3.2em + 12px);text-align:left}
+.tc-more:hover{text-decoration:underline}
+.tc-more:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.tc-cut{position:sticky;left:0;display:block;color:var(--ink-3);font-family:var(--sans);font-size:12px;padding-left:calc(3.2em + 12px)}
+.tc-result.bad{box-shadow:inset 3px 0 0 var(--err)}
+.tc-hook{justify-self:start;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--hook);border:1px dashed var(--hook);border-radius:999px;padding:1px 8px;max-width:100%;overflow-wrap:anywhere}
+.tc-hook .tc-mono{color:var(--ink-2)}
+.tc-quote{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.tc-thinking{color:var(--ink-2);font-style:italic}
+.tc-card details > summary{cursor:pointer;list-style:none}
+.tc-card details > summary::-webkit-details-marker{display:none}
+.tc-card summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.tc-chev{display:inline-block;width:10px;color:var(--ink-3);transition:transform .15s}
+.tc-card details[open] > summary .tc-chev{transform:rotate(90deg)}
+.tc-todos{margin:0;padding:0;list-style:none;font-family:var(--mono);font-size:12.5px;display:grid;gap:2px}
+
+.tl{list-style:none;margin:0;padding:0;display:grid;position:relative}
+.tl::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--line)}
+.tl-ev{display:grid;grid-template-columns:16px minmax(0,1fr);gap:12px;padding:6px 0;position:relative}
+.tl-node{width:16px;height:16px;border-radius:50%;background:var(--surface);border:2px solid var(--c);margin-top:3px;z-index:1}
+.tl-ev.small .tl-node{width:10px;height:10px;margin:6px 3px 0;background:var(--c);border:0}
+.tl-who{font-size:12px;font-weight:500;color:var(--c);letter-spacing:.02em}
+.tl-what{font-size:14px;display:grid;gap:6px;min-width:0}
+.tl-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.tl-bubble{background:var(--sunk);border-radius:2px 10px 10px 10px;padding:8px 12px;max-height:40vh;overflow:auto}
+.tl-pair{display:grid;gap:6px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.tl-pair details > summary{display:flex;align-items:baseline;gap:6px;font-size:12.5px;color:var(--ink-2)}
+.tl-pair details[open] > summary{margin-bottom:6px}
+.tl-pair .tl-body{display:grid;gap:8px}
+.tl-name{font-weight:600}
+.tl-small{font-size:12px}
+@media (prefers-reduced-motion:reduce){.tc-chev{transition:none}}
+</style>
+<article class="tc-card" id="turn-card" aria-live="polite"></article>
+<script>
+(function(){
+  const C={loop:'var(--loop)',http:'var(--http)',tool:'var(--tool)',hook:'var(--hook)',ui:'var(--ui)'};
+  const N={loop:'Agent loop',http:'HTTP',tool:'Tool',hook:'Hook',ui:'User / UI'};
+  const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const num=n=>Number(n||0).toLocaleString('en-US');
+  const many=(n,one,more)=>n+' '+(n===1?one:(more||one+'s'));
+  const STATUS={ok:['ok','✓ ok'],error:['bad','✗ error'],rejected:['bad','✗ rejected by you'],interrupted:['bad','✗ interrupted'],'no result':['none','… no result']};
+
+  function arg(a){
+    if(!a||a.kind==='none')return '';
+    if(a.kind==='path'){const i=a.v.lastIndexOf('/');return '<span class="tc-path" title="'+esc(a.v)+'">'+esc(a.v.slice(0,i+1))+'<b>'+esc(a.v.slice(i+1))+'</b></span>'}
+    if(a.kind==='cmd')return '<span class="tc-arg"><span class="tc-muted">$ </span>'+esc(a.v)+'</span>';
+    return '<span class="tc-arg">'+esc(a.v)+(a.extra?' <span class="tc-muted">in '+esc(a.extra)+'</span>':'')+'</span>';
+  }
+  const status=s=>{const x=STATUS[s]||STATUS['no result'];return '<span class="tc-status '+x[0]+'">'+x[1]+'</span>'};
+  // The result shows PREVIEW lines. The button below them shows the rest.
+  const PREVIEW=12;
+  function result(r,s){
+    if(!r.total)return '<span class="tc-muted" style="font-size:12px">The result is empty.</span>';
+    const row=(l,i)=>'<div class="tc-ln" data-n="'+(i+1)+'">'+(esc(l)||' ')+'</div>';
+    const rest=r.lines.slice(PREVIEW);
+    const cut=r.total-r.lines.length;
+    let tail='';
+    if(rest.length)tail+='<div class="tc-rest" hidden>'+rest.map((l,i)=>row(l,i+PREVIEW)).join('')+'</div>'+
+      '<button type="button" class="tc-more" aria-expanded="false" data-more="'+many(rest.length,'more line')+'">… '+many(rest.length,'more line')+'</button>';
+    if(cut>0)tail+='<span class="tc-cut">… '+many(cut,'more line')+' not in the page</span>';
+    return '<div class="tc-result'+(s==='ok'?'':' bad')+'">'+r.lines.slice(0,PREVIEW).map(row).join('')+tail+'</div>';
+  }
+  function more(e){
+    const b=e.target.closest('.tc-more');if(!b)return;
+    const rest=b.previousElementSibling,open=rest.hidden;
+    rest.hidden=!open;
+    b.setAttribute('aria-expanded',String(open));
+    b.textContent=open?'Show fewer lines':'… '+b.dataset.more;
+  }
+  const hook=h=>'<span class="tc-hook" title="'+esc(h.command)+'"><span class="tc-dot" style="--c:var(--hook)"></span><span class="tc-mono">'+esc(h.name)+'</span> → '+esc(h.outcome)+'</span>'+
+    (h.detail?'<span class="tc-muted tc-mono tl-small" style="overflow-wrap:anywhere">'+esc(h.detail)+'</span>':'');
+  function ctx(u){
+    const tot=u.cacheRead+u.cacheWrite+u.input||1,p=v=>(v/tot*100).toFixed(2)+'%';
+    return '<div class="tc-ctxbar" role="img" aria-label="Context: '+num(u.cacheRead)+' cache read, '+num(u.cacheWrite)+' cache write, '+num(u.input)+' new">'+
+      '<i style="width:'+p(u.cacheRead)+';background:var(--loop)"></i><i style="width:'+p(u.cacheWrite)+';background:var(--hook)"></i><i style="width:'+p(u.input)+';background:var(--http)"></i></div>'+
+      '<div class="tc-ctxkey"><span><i class="tc-sq" style="--c:var(--loop)"></i>cache read '+num(u.cacheRead)+'</span><span><i class="tc-sq" style="--c:var(--hook)"></i>cache write '+num(u.cacheWrite)+'</span><span><i class="tc-sq" style="--c:var(--http)"></i>new '+num(u.input)+'</span></div>';
+  }
+  const ev=(c,who,what,small)=>'<li class="tl-ev'+(small?' small':'')+'" style="--c:'+c+'"><span class="tl-node"></span><div class="tl-what">'+(who?'<span class="tl-who">'+who+'</span>':'')+what+'</div></li>';
+
+  function timeline(x){
+    const u=x.usage,out=[];
+    out.push(ev(C.http,'Agent loop → Messages API','<div class="tl-line"><span class="tc-mono">POST /v1/messages</span><span class="tc-muted tc-mono">'+esc(x.model||'?')+'</span></div>'+
+      (u?'<div class="tl-line"><span class="tc-num">'+num(u.cacheRead+u.cacheWrite+u.input)+' tokens of context</span></div>'+ctx(u):'<span class="tc-muted">The log has no token usage for this request.</span>')));
+    // The response blocks first, then the stop reason, then the tool calls that the agent loop runs.
+    for(const b of x.blocks){
+      if(b.type==='tool_use')continue;
+      if(b.type==='thinking')out.push(ev(C.loop,'Model thinks'+(u&&u.thinking?' · '+num(u.thinking)+' tokens':''),
+        b.text?'<p class="tc-quote tc-thinking">'+esc(b.text)+'</p>':'<span class="tc-thinking tc-muted">The log does not record the thinking text.</span>'));
+      else if(b.type==='redacted_thinking')out.push(ev(C.loop,'Model thinks','<span class="tc-thinking tc-muted">The thinking is redacted.</span>'));
+      else if(b.type==='text')out.push(ev(C.loop,'Model writes','<p class="tc-quote tl-bubble">'+esc(b.text)+'</p>'));
+      else if(b.type==='server_tool_use')out.push(ev(C.tool,'Model calls a server tool','<div class="tl-line"><span class="tl-name">'+esc(b.name)+'</span>'+arg(b.arg)+'</div>'));
+    }
+    out.push(ev(C.http,'Messages API → Agent loop','<div class="tl-line"><span>stop_reason <span class="tc-pill">'+esc(x.stop||'?')+'</span></span>'+(u?'<span class="tc-muted tc-num">'+num(u.output)+' output tokens</span>':'')+'</div>'));
+    for(const b of x.blocks){
+      if(b.type!=='tool_use')continue;
+      {
+        const t=x.tools[b.tool];if(!t)continue;
+        for(const h of t.pre)out.push(ev(C.hook,'',hook(h),true));
+        const body=[];
+        if(t.todos.length)body.push('<ul class="tc-todos">'+t.todos.map(l=>'<li>'+esc(l)+'</li>').join('')+'</ul>');
+        if(t.result)body.push(result(t.result,t.status));
+        if(t.subagent)body.push('<span class="tc-muted tl-small">Subagent: '+esc(t.subagent)+'</span>');
+        // A command shows in full, in its own block. The fold holds only the result.
+        const cmd=t.arg.kind==='cmd';
+        const head='<div class="tl-line"><span class="tl-name">'+esc(t.name)+'</span>'+(cmd?'':arg(t.arg))+status(t.status)+'</div>';
+        const label=t.result?(t.result.total?'Result · <span class="tc-num">'+many(t.result.total,'line')+'</span>':'Result'):'Details';
+        out.push(ev(C.tool,'Agent loop runs a tool','<div class="tl-pair">'+head+(cmd?'<pre class="tc-cmd">'+esc(t.arg.v)+'</pre>':'')+
+          (body.length?'<details'+(t.status!=='ok'||x.tools.length===1?' open':'')+'><summary><span class="tc-chev">›</span>'+label+'</summary><div class="tl-body">'+body.join('')+'</div></details>':'')+'</div>'));
+        for(const h of t.post)out.push(ev(C.hook,'',hook(h),true));
+      }
+    }
+    const results=x.tools.filter(t=>t.result).length;
+    if(results)out.push(ev(C.loop,'Agent loop','<span>Adds '+many(results,'tool_result block')+' to messages[].</span>'));
+    else if(x.stop==='end_turn')out.push(ev(C.loop,'Agent loop','<span>The response has no tool_use. The loop exits.</span>'));
+    for(const h of x.hooks)out.push(ev(C.hook,'',hook(h),true));
+    return '<ol class="tl">'+out.join('')+'</ol>';
+  }
+
+  const card=document.getElementById('turn-card');
+  card.addEventListener('click',more);
+  window.renderTurn=function(s,x){
+    card.innerHTML='<div class="tc-tags">'+s.k.map(k=>'<span class="tc-tag" style="--c:'+C[k]+'"><i class="tc-dot"></i>'+N[k]+'</span>').join('')+'</div>'+
+      '<h2>'+esc(s.t)+'</h2><p>'+esc(s.d)+'</p>'+
+      (x?timeline(x):s.c?'<pre class="tc-pre">'+esc(s.c)+'</pre>':'');
+  };
+})();
+</script>

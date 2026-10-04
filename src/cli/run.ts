@@ -8,7 +8,7 @@ import { sources } from '../sources/index.js';
 import type { SessionInfo } from '../sources/index.js';
 import { toView } from '../view/steps.js';
 import type { View } from '../view/steps.js';
-import { renderHtml } from '../render/html.js';
+import { DEFAULT_TURN_CONTENT, isTurnContent, renderHtml, TURN_CONTENTS } from '../render/html.js';
 import { parseArgs, helpText, UsageError } from './args.js';
 import type { ListArgs, TraceArgs } from './args.js';
 import { formatSessionList } from './list.js';
@@ -49,7 +49,7 @@ export async function run(argv: readonly string[], io: IO): Promise<ExitCode> {
   try {
     const args = parseArgs(argv);
     if (args.mode === 'help') {
-      io.stdout.write(helpText(formats.map((f) => f.id)));
+      io.stdout.write(helpText(formats.map((f) => f.id), TURN_CONTENTS, DEFAULT_TURN_CONTENT));
       return EXIT.ok;
     }
     if (args.mode === 'version') {
@@ -58,6 +58,9 @@ export async function run(argv: readonly string[], io: IO): Promise<ExitCode> {
     }
     if (args.format !== undefined && !getFormat(args.format)) {
       throw new UsageError(`unknown format "${args.format}" (known: ${formats.map((f) => f.id).join(', ')})`);
+    }
+    if (args.mode === 'trace' && args.turnContent !== undefined && !isTurnContent(args.turnContent)) {
+      throw new UsageError(`unknown turn content "${args.turnContent}" (known: ${TURN_CONTENTS.join(', ')})`);
     }
     return await execute(args, io);
   } catch (e) {
@@ -175,7 +178,8 @@ async function trace(file: string, args: TraceArgs, io: IO): Promise<ExitCode> {
     }
     throw e;
   }
-  const html = renderHtml(view);
+  const turnContent = args.turnContent !== undefined && isTurnContent(args.turnContent) ? args.turnContent : DEFAULT_TURN_CONTENT;
+  const html = renderHtml(view, { turnContent });
 
   const target = args.output;
   if (target.kind === 'stdout') {
