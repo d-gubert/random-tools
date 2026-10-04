@@ -89,7 +89,7 @@ usage: yast [options] [session]
   -o, --output FILE  write the page to FILE
       --stdout       write the page to stdout
   -f, --format ID    log format; default: detect (claude-code)
-  --turn-content ID  how the page shows a loop turn: timeline, inspector; default: timeline
+  --turn-content ID  how the page shows a loop turn: timeline, inspector, classic; default: timeline
   -l, --list         list the sessions and exit
   -n, --limit N      number of sessions in the list (default 20)
   -h, --help         show this help
@@ -102,6 +102,7 @@ Rules:
 - `--list` cannot be used with a session, `-o`, `--stdout`, or `--turn-content`.
 - `--turn-content` selects the fragment that shows a step on the page:
   - `timeline` (the default) shows a loop turn as the events in order: the request, the thinking, the text, the stop reason, and then each tool call with its hooks and its result. A command shows in full. A result shows 12 lines; click "more lines" to see the rest (up to 2,000 lines).
+  - `classic` shows the text block of the step, as the page did before the fragments.
   - `inspector` shows the model, the context, the output tokens, and the stop reason in a grid. Tabs show the tool calls as a table, the response blocks, and the raw text.
 - `-f` selects a format by its ID. Without `-f`, yast detects the format from the file.
 - `-o` does not create directories. The directory of `FILE` must exist.
@@ -206,6 +207,8 @@ A fragment in `src/render/fragment/turn-content/` holds the full article of a st
 - `step` is a `Step` (the title, the tags, the description, and the code text `c`).
 - `detail` is the `TurnDetail` of a request step, else `null`. It has the usage, the response blocks, the tool calls with their hooks and results, and the turn hooks.
 - `meta` is the `ViewMeta`.
+
+`classic.html` ignores `detail` and shows `step.c`. Use it as the smallest example of a fragment.
 
 To add a fragment, add `<id>.html` to the folder and add the ID to `TURN_CONTENTS` in `src/render/html.ts`. Use the color tokens of `page.html`. Do not reuse an `id` of `page.html`.
 

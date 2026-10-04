@@ -301,7 +301,7 @@ test('--turn-content nope is a usage error', async () => {
   const { code, out, err } = await go([pathA, '--turn-content', 'nope']);
   assert.equal(code, 2);
   assert.equal(out, '');
-  assert.match(err, /unknown turn content "nope" \(known: timeline, inspector\)\nTry "yast --help"\.\n$/);
+  assert.match(err, /unknown turn content "nope" \(known: timeline, inspector, classic\)\nTry "yast --help"\.\n$/);
   assert.deepEqual(await readdir(cwd), []);
 });
 

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { View } from '../view/steps.js';
 
 /** The turn-content fragments, by id. Each one is `fragment/turn-content/<id>.html`. */
-export const TURN_CONTENTS = ['timeline', 'inspector'] as const;
+export const TURN_CONTENTS = ['timeline', 'inspector', 'classic'] as const;
 export type TurnContent = (typeof TURN_CONTENTS)[number];
 export const DEFAULT_TURN_CONTENT: TurnContent = 'timeline';
 
@@ -17,6 +17,7 @@ const PAGE = read('./page.html');
 const FRAGMENTS: Readonly<Record<TurnContent, string>> = {
   timeline: read('./fragment/turn-content/timeline.html'),
   inspector: read('./fragment/turn-content/inspector.html'),
+  classic: read('./fragment/turn-content/classic.html'),
 };
 
 export type RenderOptions = {

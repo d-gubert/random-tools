@@ -1,0 +1,32 @@
+<!-- Turn content: classic. The page inserts this fragment in place of the article.
+     Contract: define renderTurn(step, detail, meta). This fragment ignores `detail`:
+     it shows the code text of the step (`step.c`), as the page did before the fragments.
+     It uses the color tokens of page.html. -->
+<style>
+.tc-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:grid;gap:10px;min-width:0}
+.tc-tags{display:flex;gap:6px;flex-wrap:wrap}
+.tc-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:2px 9px 2px 7px;border-radius:999px;border:1px solid var(--c);color:var(--c)}
+.tc-dot{width:7px;height:7px;border-radius:50%;background:var(--c);flex:none;display:inline-block}
+.tc-card h2{font-size:18px;font-weight:600;margin:0;overflow-wrap:anywhere}
+.tc-card p{margin:0;color:var(--ink-2);max-width:65ch}
+.tc-pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.6;background:var(--sunk);border-radius:8px;padding:12px 14px;overflow:auto;max-height:60vh;white-space:pre;color:var(--ink)}
+</style>
+<article class="tc-card" id="turn-card" aria-live="polite">
+  <div class="tc-tags" id="turn-tags"></div>
+  <h2 id="turn-title"></h2>
+  <p id="turn-desc"></p>
+  <pre class="tc-pre" id="turn-code"></pre>
+</article>
+<script>
+(function(){
+  const C={loop:'var(--loop)',http:'var(--http)',tool:'var(--tool)',hook:'var(--hook)',ui:'var(--ui)'};
+  const N={loop:'Agent loop',http:'HTTP',tool:'Tool',hook:'Hook',ui:'User / UI'};
+  const $=id=>document.getElementById(id);
+  window.renderTurn=function(s){
+    $('turn-title').textContent=s.t;
+    $('turn-desc').textContent=s.d;
+    $('turn-code').textContent=s.c;
+    $('turn-tags').innerHTML=s.k.map(k=>'<span class="tc-tag" style="--c:'+C[k]+'"><i class="tc-dot"></i>'+N[k]+'</span>').join('');
+  };
+})();
+</script>
