@@ -35,7 +35,7 @@
     "ts": "2026-01-01T10:00:09.000Z"
   },
   {
-    "t": "Turn 1: Glob",
+    "t": "Turn 1: Glob · packages/apps/**/*.ts",
     "k": [
       "http",
       "tool",
@@ -62,7 +62,7 @@
     "ts": "2026-01-01T10:00:33.000Z"
   },
   {
-    "t": "Turn 3: Bash",
+    "t": "Turn 3: Bash · pnpm vitest run",
     "k": [
       "http",
       "tool",
@@ -86,7 +86,7 @@
     "ts": "2026-01-01T10:00:57.000Z"
   },
   {
-    "t": "Turn 4: Agent",
+    "t": "Turn 4: Agent · Find test helpers",
     "k": [
       "http",
       "tool"

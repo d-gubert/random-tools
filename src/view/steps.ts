@@ -1,6 +1,6 @@
 // Session → View. Knows the Session model only, never a log format.
 
-import type { Hook, RequestEvent, Session, SessionEvent, SessionEndEvent, SessionId, Timestamp, ToolStatus, Usage } from '../model.js';
+import type { Hook, RequestEvent, Session, SessionEvent, SessionEndEvent, SessionId, Timestamp, ToolCall, ToolStatus, Usage } from '../model.js';
 import { clip, quote, num, ktok, plural, times, duration, countNames, isRecord } from './text.js';
 
 /** The tags of a step. They set the colors on the page. */
@@ -58,6 +58,22 @@ function toolArg(name: string, input: unknown): string {
   if (typeof pick === 'string') return quote(pick, 110);
   if (name === 'TodoWrite') return '';
   return clip(JSON.stringify(input), 110);
+}
+
+/** A short label for the step list: what the call is about. "" when the input has nothing short. */
+function toolHint(input: unknown): string {
+  if (!isRecord(input)) return '';
+  const path = input.file_path ?? input.notebook_path;
+  if (typeof path === 'string') return path.split('/').pop() || path;
+  const pick = input.description ?? input.pattern ?? input.skill ?? input.query ?? input.url ?? input.command;
+  return typeof pick === 'string' ? clip(pick, 60) : '';
+}
+
+/** The tool hint when all calls share one, else "". */
+function toolsHint(tools: readonly ToolCall[]): string {
+  const hints = new Set(tools.map((t) => toolHint(t.input)));
+  const [only] = hints;
+  return hints.size === 1 && only ? only : '';
 }
 
 function todoLines(input: unknown): string[] {
@@ -241,7 +257,10 @@ function describeRequest(s: RequestEvent, n: number): StepText {
   const allHooks = toolHooks + s.hooks.length;
 
   const first = tools[0];
-  const title = `Turn ${n}: ` + (tools.length ? countNames(tools.map((t) => t.name)) : s.stopReason === 'end_turn' ? 'end_turn' : s.stopReason || 'text reply');
+  const hint = toolsHint(tools);
+  const title =
+    `Turn ${n}: ` +
+    (tools.length ? countNames(tools.map((t) => t.name)) + (hint ? ` · ${hint}` : '') : s.stopReason === 'end_turn' ? 'end_turn' : s.stopReason || 'text reply');
   const k: [Kind, ...Kind[]] = ['http', tools.length ? 'tool' : 'loop'];
   if (allHooks) k.push('hook');
   if (rejected || status.includes('interrupted')) k.push('ui');
