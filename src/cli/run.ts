@@ -1,7 +1,7 @@
 // The CLI: argv + io → exit code. The only module that joins sources, formats, view and render.
 
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { formats, getFormat, parseSession, UnknownFormatError } from '../formats/index.js';
 import { sources } from '../sources/index.js';
@@ -90,6 +90,25 @@ function isFile(path: string): boolean {
   }
 }
 
+/**
+ * Write `text` to `path`, or, when `path` exists, to the first free `<name>.N<ext>`
+ * (N = 1, 2, …). The `wx` flag makes the check and the write one step.
+ * @returns the path that the function writes
+ */
+function writeNew(path: string, text: string): string {
+  const ext = extname(path);
+  const stem = path.slice(0, path.length - ext.length);
+  for (let n = 0; ; n++) {
+    const target = n === 0 ? path : `${stem}.${n}${ext}`;
+    try {
+      writeFileSync(target, text, { flag: 'wx' });
+      return target;
+    } catch (e) {
+      if (!(e instanceof Error && 'code' in e && e.code === 'EEXIST')) throw e;
+    }
+  }
+}
+
 const isNonEmpty = <T>(items: readonly T[]): items is readonly [T, ...T[]] => items.length > 0;
 
 /** @returns absolute path of the session file */
@@ -164,7 +183,7 @@ async function trace(file: string, args: TraceArgs, io: IO): Promise<ExitCode> {
     return EXIT.ok;
   }
   const out = target.kind === 'file' ? resolve(io.cwd, target.path) : join(io.cwd, `${basename(file, '.jsonl')}.trace.html`);
-  writeFileSync(out, html);
-  io.stderr.write(`${file}\n→ ${out}  (${view.steps.length} steps, ${view.meta.turns} loop turns)\n`);
+  const written = writeNew(out, html);
+  io.stderr.write(`${file}\n→ ${written}  (${view.steps.length} steps, ${view.meta.turns} loop turns)\n`);
   return EXIT.ok;
 }

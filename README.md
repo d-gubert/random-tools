@@ -127,6 +127,8 @@ CLAUDE_CONFIG_DIR=~/.claude-work yast --list
 2. With `-o FILE`, yast writes the page to `FILE`. A relative path starts at the current directory.
 3. Otherwise, yast writes `<session-id>.trace.html` in the current directory. The session ID is the file name without `.jsonl`.
 
+yast does not overwrite a file. When the output file exists, yast writes `<name>.1.html`, then `<name>.2.html`, and so on. It uses the first free number.
+
 When yast writes a file, it prints the input path, the output path, and the number of steps and loop turns to stderr.
 
 ## How to read the page

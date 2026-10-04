@@ -73,6 +73,26 @@ test('a path: writes <name>.trace.html in the cwd and prints the summary', async
   assert.ok(await exists(target));
 });
 
+test('an existing output file is kept: the page goes to <name>.N.html', async () => {
+  const first = join(cwd, `${ID_A}.trace.html`);
+  await writeFile(first, 'old');
+  const second = await go([pathA]);
+  assert.equal(second.code, 0);
+  assert.match(second.err, new RegExp(`→ ${join(cwd, `${ID_A}.trace.1.html`)} `));
+  const third = await go([pathA]);
+  assert.match(third.err, new RegExp(`→ ${join(cwd, `${ID_A}.trace.2.html`)} `));
+  assert.equal(await readFile(first, 'utf8'), 'old');
+  assert.deepEqual((await readdir(cwd)).sort(), [`${ID_A}.trace.1.html`, `${ID_A}.trace.2.html`, `${ID_A}.trace.html`]);
+});
+
+test('-o to an existing file writes <name>.1<ext>', async () => {
+  await writeFile(join(cwd, 'x.html'), 'old');
+  const { code, err } = await go([pathA, '-o', 'x.html']);
+  assert.equal(code, 0);
+  assert.match(err, /→ .*\/x\.1\.html /);
+  assert.equal(await readFile(join(cwd, 'x.html'), 'utf8'), 'old');
+});
+
 test('a path relative to the cwd', async () => {
   await copyFile(FIXTURE, join(cwd, 'mine.jsonl'));
   const { code, err } = await go(['mine.jsonl']);
