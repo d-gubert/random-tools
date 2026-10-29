@@ -1,0 +1,14 @@
+{
+  "name": "http-inspect",
+  "description": "Debug tools for Claude Code.",
+  "owner": {
+    "name": "d-gubert"
+  },
+  "plugins": [
+    {
+      "name": "http-inspect",
+      "source": "./plugins/http-inspect",
+      "description": "Capture the raw HTTP request Claude Code sends to the model API and every chunk of the response."
+    }
+  ]
+}

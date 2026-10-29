@@ -1,0 +1,7 @@
+{
+  "name": "http-inspect",
+  "version": "0.1.0",
+  "description": "Capture the raw HTTP request Claude Code sends to the model API and every chunk of the response, for inspection.",
+  "author": { "name": "d-gubert" },
+  "keywords": ["debug", "http", "proxy", "sse", "inspect"]
+}
