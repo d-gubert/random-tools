@@ -85,6 +85,20 @@ function stamp(d = new Date()) {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${p(d.getMilliseconds(), 3)}`;
 }
 
+function sessionKey(id) {
+  return String(id || 'no-session').replace(/[^\w.-]/g, '_');
+}
+
+// The capture folder of one exchange, relative to CAPTURES:
+// <session-id>/<YYYYMMDD>/<HHMMSS>-<seq>, with one sequence per session.
+function captureDir(req, d) {
+  const p = (x) => String(x).padStart(2, '0');
+  const session = sessionKey(req.headers['x-claude-code-session-id']);
+  const n = (sessionSeq.get(session) || 0) + 1;
+  sessionSeq.set(session, n);
+  return path.join(session, `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`, `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${String(n).padStart(4, '0')}`);
+}
+
 function tryJson(text) {
   try {
     return JSON.parse(text);
@@ -188,6 +202,7 @@ function sseParser(onEvent) {
 // ---------------------------------------------------------------- proxy
 
 let seq = 0;
+const sessionSeq = new Map();
 
 function targetFor(reqUrl) {
   const base = upstreamBase();
@@ -246,7 +261,8 @@ function handle(req, res) {
   const t0 = performance.now();
   const startedAt = new Date();
   const id = `${stamp(startedAt)}-${String(++seq).padStart(4, '0')}`;
-  const dir = path.join(CAPTURES, id);
+  const rel = captureDir(req, startedAt);
+  const dir = path.join(CAPTURES, rel);
   fs.mkdirSync(dir, { recursive: true });
 
   const bodyParts = [];
@@ -306,7 +322,7 @@ function handle(req, res) {
         error: error ? String(error.message || error) : undefined,
       });
       const entry = {
-        id, startedAt: reqMeta.startedAt, method: req.method, path: req.url, status,
+        id, dir: rel, startedAt: reqMeta.startedAt, method: req.method, path: req.url, status,
         model: json && json.model, stream: json && json.stream === true, totalMs, firstByteMs,
         reqBytes: body.length, resBytes: bytes, chunks: chunkSeq,
         session: req.headers['x-claude-code-session-id'], error: error ? String(error.message || error) : undefined,
@@ -372,6 +388,10 @@ function log(msg) {
 
 function serve() {
   fs.mkdirSync(CAPTURES, { recursive: true });
+  // Continue the sequences across restarts, so that a folder name never repeats.
+  const index = readIndex();
+  seq = index.length;
+  for (const e of index) if (!e.upgrade) sessionSeq.set(sessionKey(e.session), (sessionSeq.get(sessionKey(e.session)) || 0) + 1);
   const server = http.createServer(handle);
   server.on('upgrade', handleUpgrade);
   server.keepAliveTimeout = 120_000;
@@ -430,14 +450,19 @@ function readIndex() {
   return fs.readFileSync(INDEX, 'utf8').split('\n').filter(Boolean).map(tryJson).filter(Boolean);
 }
 
-function resolveId(arg) {
-  const all = readIndex();
+// Returns the index entry of one exchange. Upgrades have no folder, so skip them.
+function resolve(arg) {
+  const all = readIndex().filter((e) => !e.upgrade);
   if (!all.length) throw new Error(`no captures yet in ${DIR}`);
-  if (!arg || arg === 'last') return all[all.length - 1].id;
-  if (/^-?\d+$/.test(arg) && Number(arg) <= 0) return all[all.length - 1 + Number(arg)].id;
-  const hit = all.filter((e) => e.id.includes(arg));
+  if (!arg || arg === 'last') return all[all.length - 1];
+  if (/^-?\d+$/.test(arg) && Number(arg) <= 0) return all[all.length - 1 + Number(arg)];
+  const hit = all.filter((e) => e.id.includes(arg) || (e.dir || '').includes(arg) || (e.session || '').includes(arg));
   if (!hit.length) throw new Error(`no capture matches "${arg}"`);
-  return hit[hit.length - 1].id;
+  return hit[hit.length - 1];
+}
+
+function entryDir(e) {
+  return path.join(CAPTURES, e.dir || e.id);
 }
 
 function list(n = 20) {
@@ -463,8 +488,9 @@ function clip(s, n = 400) {
 }
 
 function show(arg, { full = false } = {}) {
-  const id = resolveId(arg);
-  const dir = path.join(CAPTURES, id);
+  const entry = resolve(arg);
+  const id = entry.id;
+  const dir = entryDir(entry);
   const rq = tryJson(fs.readFileSync(path.join(dir, 'request.json'), 'utf8'));
   const rs = fs.existsSync(path.join(dir, 'response.json')) ? tryJson(fs.readFileSync(path.join(dir, 'response.json'), 'utf8')) : null;
   const body = fs.existsSync(path.join(dir, 'request.body.json')) ? tryJson(fs.readFileSync(path.join(dir, 'request.body.json'), 'utf8')) : null;
@@ -590,7 +616,7 @@ try {
     case 'run': await run(rest[0] === '--' ? rest.slice(1) : rest); break;
     case 'list': list(Number(pos[0] || 20)); break;
     case 'show': show(pos[0], { full }); break;
-    case 'path': console.log(path.join(CAPTURES, resolveId(pos[0]))); break;
+    case 'path': console.log(entryDir(resolve(pos[0]))); break;
     case 'hook-session-start': await hookSessionStart(); break;
     default:
       console.log(fs.readFileSync(SELF, 'utf8').split('\n').slice(1, 26).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));

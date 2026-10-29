@@ -62,7 +62,11 @@ In Claude Code:
 From a shell, the same script has `status`, `list`, `show`, `path`, `start`
 and `stop` subcommands.
 
-Each exchange gets a folder in `~/.claude/http-inspect/captures/<id>/`:
+Each exchange gets a folder in
+`~/.claude/http-inspect/captures/<session-id>/<YYYYMMDD>/<HHMMSS>-<seq>/`.
+The session ID comes from the `x-claude-code-session-id` header (`no-session`
+when the header is absent). Each session has its own sequence number.
+The folder holds these files:
 
 | File | Content |
 | --- | --- |
